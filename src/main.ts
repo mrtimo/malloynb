@@ -46,8 +46,23 @@ function setStatus(msg: string, kind: 'busy' | 'ok' | 'error' | '' = '') {
 // Engine (starts loading DuckDB right away, in parallel with the notebook fetch)
 // ---------------------------------------------------------------------------
 
-const engine = new Engine();
-const engineReady = engine.ready();
+let engine = new Engine();
+let engineReady = engine.ready();
+let engineUsed = false;
+
+/** Each notebook gets a fresh engine, so files and schemas from the last one can't leak in. */
+function freshEngine() {
+  if (!engineUsed) {
+    engineUsed = true;
+    return;
+  }
+  const old = engine;
+  old.connection.close().catch(() => {});
+  engine = new Engine();
+  engineReady = engine.ready();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (import.meta.env.DEV) (window as any).__engine = engine;
+}
 const renderer = new MalloyRenderer();
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 if (import.meta.env.DEV) (window as any).__engine = engine;
@@ -231,6 +246,7 @@ async function loadNotebook(text: string, origin: NotebookOrigin) {
   state.origin = origin;
   state.compiled.clear();
   state.failed.clear();
+  freshEngine();
   engine.setOrigin(origin);
   renderCells();
   document.title = `${state.sourceName.replace(/\.malloynb$/, '')} · Malloy Notebook`;
@@ -759,8 +775,9 @@ function init() {
     const v = $<HTMLInputElement>('url-input').value.trim();
     if (!v) return;
     const raw = toRawUrl(v);
-    history.pushState(null, '', viewerLink(raw).replace(location.origin, ''));
-    openFromUrl(raw);
+    // Load in a fresh page: DuckDB and Malloy keep per-notebook state (registered
+    // files, schema caches), so reusing them for a second notebook can break it.
+    location.assign(viewerLink(raw));
   });
   $('run-all').addEventListener('click', () => runAll());
   $('share').addEventListener('click', () => share());
