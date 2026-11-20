@@ -32,6 +32,8 @@ const FILE_TABLE = /\.(parquet|csv|tsv|json|jsonl|ndjson)(\?.*)?$/i;
  */
 class NotebookDuckDB extends DuckDBWASMConnection {
   origin: NotebookOrigin | null = null;
+  /** Remote .malloy files the notebook imported; relative data paths may be relative to these. */
+  importedFiles: URL[] = [];
   private registered = new Set<string>();
 
   getBundles(): duckdb.DuckDBBundles {
@@ -80,8 +82,9 @@ class NotebookDuckDB extends DuckDBWASMConnection {
         this.registered.add(tablePath);
         continue;
       }
-      if (/^https?:$/.test(this.origin.url.protocol)) {
-        const resolved = await resolveRelativeData(tablePath, this.origin.url);
+      const bases = [this.origin.url, ...this.importedFiles];
+      if (bases.some(b => /^https?:$/.test(b.protocol))) {
+        const resolved = await resolveRelativeData(tablePath, bases);
         await this.registerRemoteTable(tablePath, resolved);
         this.registered.add(tablePath);
       }
@@ -90,6 +93,7 @@ class NotebookDuckDB extends DuckDBWASMConnection {
 
   resetRegistrations() {
     this.registered.clear();
+    this.importedFiles = [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this as any).remoteFileStatus = {};
   }
@@ -97,15 +101,23 @@ class NotebookDuckDB extends DuckDBWASMConnection {
 
 /**
  * Find the URL for a relative data path. VS Code resolves DuckDB paths against the
- * workspace folder, which is usually the repo root, not the notebook's folder. So for
- * GitHub notebooks we try the notebook's folder first, then the repo root.
+ * workspace folder, which is usually the repo root, not the notebook's folder. Malloy
+ * doesn't say which file a table path came from, so for each base file (the notebook,
+ * then every .malloy file it imported) we try that file's folder and its GitHub repo root.
  */
-async function resolveRelativeData(path: string, notebookUrl: URL): Promise<string> {
-  const candidates = [new URL(path, notebookUrl).toString()];
-  const gh = notebookUrl
-    .toString()
-    .match(/^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[^/]+\//);
-  if (gh) candidates.push(new URL(path.replace(/^\.?\//, ''), gh[0]).toString());
+async function resolveRelativeData(path: string, bases: URL[]): Promise<string> {
+  const candidates: string[] = [];
+  const add = (u: string) => {
+    if (!candidates.includes(u)) candidates.push(u);
+  };
+  for (const base of bases) {
+    if (!/^https?:$/.test(base.protocol)) continue;
+    add(new URL(path, base).toString());
+    const gh = base
+      .toString()
+      .match(/^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[^/]+\//);
+    if (gh) add(new URL(path.replace(/^\.?\//, ''), gh[0]).toString());
+  }
   for (const url of candidates) {
     try {
       const res = await fetch(url, {method: 'HEAD'});
@@ -114,7 +126,7 @@ async function resolveRelativeData(path: string, notebookUrl: URL): Promise<stri
       /* try the next one */
     }
   }
-  return candidates[0]; // let DuckDB report the error for the most likely location
+  return candidates[0] ?? path; // let DuckDB report the error for the most likely location
 }
 
 export type CellRun =
@@ -184,6 +196,9 @@ export class Engine {
       );
     }
     const res = await fetch(url.toString());
+    if (res.ok && !this.connection.importedFiles.some(u => u.href === url.href)) {
+      this.connection.importedFiles.push(url);
+    }
     if (!res.ok) throw new Error(`Could not load ${url} (HTTP ${res.status})`);
     return await res.text();
   }
