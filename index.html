@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Malloy Notebook Viewer</title>
+    <meta name="description" content="Open, run and share Malloy notebooks (.malloynb) in the browser with DuckDB-WASM." />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232563eb'/><path d='M8 23V9l8 8 8-8v14' stroke='white' stroke-width='3' fill='none' stroke-linejoin='round'/></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" id="brand-link" href="./" title="Home">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" /><path d="M8 23V9l8 8 8-8v14" /></svg>
+        <span>Malloy Notebook</span>
+      </a>
+      <form id="url-form" class="url-form">
+        <input id="url-input" type="url" placeholder="Paste a .malloynb URL (GitHub, raw, gist…)" spellcheck="false" autocomplete="off" />
+        <button type="submit" class="btn primary">Open</button>
+      </form>
+      <div class="actions" id="nb-actions" hidden>
+        <button class="btn" id="run-all" title="Run every cell">▶ Run all</button>
+        <button class="btn" id="share" title="Copy a link to this notebook">Share</button>
+        <button class="btn" id="download" title="Download the .malloynb file">Download</button>
+      </div>
+    </header>
+
+    <main id="app">
+      <section id="welcome" class="welcome">
+        <h1>Run and share Malloy notebooks in the browser</h1>
+        <p class="lede">
+          Paste the link to a <code>.malloynb</code> file, or drop one here. The page loads DuckDB and the
+          Malloy compiler in your browser, reads the notebook, and runs it. There's nothing to install and no server.
+        </p>
+        <div id="dropzone" class="dropzone" tabindex="0">
+          <strong>Drop a .malloynb file here</strong>
+          <span>You can include .malloy files it imports, and local data files, in the same drop.</span>
+          <label class="btn">Choose files…<input id="file-input" type="file" multiple accept=".malloynb,.malloy,.parquet,.csv,.json" hidden /></label>
+        </div>
+        <div class="howto">
+          <h2>Share a notebook from GitHub</h2>
+          <p>Take the notebook's GitHub address and replace <code>github.com</code> with this site's address followed by <code>/github</code>:</p>
+          <pre class="url-example"><span class="dim">https://</span><s>github.com</s>/user/repo/blob/main/analysis.malloynb
+<span class="dim">https://</span><b id="host-example"></b>/github/user/repo/blob/main/analysis.malloynb</pre>
+          <p>Or use <code>?url=</code> with any public link: <code id="query-example"></code></p>
+          <p><a id="example-link" href="#">Open the example notebook →</a></p>
+          <h2>What works</h2>
+          <ul>
+            <li>Notebooks that use the <code>duckdb</code> connection with public Parquet or CSV files.</li>
+            <li>Data URLs must allow cross-site requests (CORS). GitHub raw files, Hugging Face and shell.duckdb.org do.</li>
+            <li>Relative paths like <code>duckdb.table('data/x.parquet')</code> and <code>import "model.malloy"</code> resolve against the notebook's URL.</li>
+            <li>You can edit and re-run cells. Edits stay in your browser until you share a link that includes them.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="notebook" class="notebook" hidden>
+        <div class="nb-head">
+          <div class="nb-source" id="nb-source"></div>
+          <div class="nb-status" id="nb-status"></div>
+        </div>
+        <div id="cells"></div>
+      </section>
+    </main>
+
+    <footer class="footer" id="footer"></footer>
+    <div id="drop-overlay" class="drop-overlay" hidden><div>Drop to open</div></div>
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+.vercel
+malloy-config.json
+
+# Local editor / agent config (not part of the app)
+.agents/
+.claude/
+.mcp.json
+.vscode/

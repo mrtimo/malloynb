@@ -1,0 +1,81 @@
+>>>markdown
+# US Flights: Which Carriers Fly Where?
+
+This notebook explores a sample of US domestic flights. The data is a public Parquet file
+hosted on GitHub, and every query below runs **in your browser** with DuckDB.
+
+Edit any cell and press **Shift+Enter** to re-run it.
+>>>markdown
+## The model
+
+First we define a source. It joins each flight to its carrier and its origin airport, and
+adds a few reusable measures.
+>>>malloy
+source: carriers is duckdb.table('https://raw.githubusercontent.com/malloydata/malloy-samples/main/data/carriers.parquet') extend {
+  primary_key: code
+}
+
+source: airports is duckdb.table('https://raw.githubusercontent.com/malloydata/malloy-samples/main/data/airports.parquet') extend {
+  primary_key: code
+  measure: airport_count is count()
+}
+
+source: flights is duckdb.table('https://raw.githubusercontent.com/malloydata/malloy-samples/main/data/flights.parquet') extend {
+  join_one: carriers with carrier
+  join_one: origin_airport is airports with origin
+  join_one: dest_airport is airports with destination
+
+  measure:
+    flight_count is count()
+    total_distance is distance.sum()
+    avg_delay is round(avg(arr_delay), 1)
+    pct_late is round(count() { where: arr_delay > 15 } / count() * 100, 1)
+}
+>>>markdown
+## Busiest carriers
+>>>malloy
+# bar_chart
+run: flights -> {
+  group_by: carriers.nickname
+  aggregate: flight_count
+  order_by: flight_count desc
+  limit: 10
+}
+>>>markdown
+## Flights per month
+
+Malloy truncates timestamps with `.month`, and the renderer draws a line chart.
+>>>malloy
+# line_chart
+run: flights -> {
+  group_by: flight_month is dep_time.month
+  aggregate: flight_count
+  order_by: flight_month
+}
+>>>markdown
+## Nested results
+
+One of Malloy's strengths is nesting. For each of the top five carriers, here are its
+busiest origin airports and how often it is late.
+>>>malloy
+run: flights -> {
+  group_by: carriers.nickname
+  aggregate: flight_count, avg_delay, pct_late
+  limit: 5
+  nest: top_origins is {
+    group_by: origin_airport.city, origin_airport.state
+    aggregate: flight_count
+    limit: 4
+  }
+}
+>>>markdown
+## Airports by state
+
+A plain table from the airports file.
+>>>malloy
+run: airports -> {
+  group_by: state
+  aggregate: airport_count
+  order_by: airport_count desc
+  limit: 8
+}
